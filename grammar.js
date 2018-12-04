@@ -2,330 +2,531 @@ module.exports = grammar({
   name: 'lustre',
 
   rules: {
-    source_file: $ => repeat($._definition),
+    source_file: $ => repeat('add1bit.lus'),
 
-    _definition: $ => choice(
-      $.node_definition,
-      $.type_definition,
-      $.const_definition,
-      $.var_definition
-
-      // TODO: other kinds of definitions
+    program: $ => seq(
+      repeat($.include),
+      choice(
+        $.packBody,
+        $.packList
+      )
     ),
 
-    node_definition: $ => seq(
-      optional($._function_mode),
-      choice(
-        'node',
-        'function'
-      ),
+    packList: $ => seq(
+      $.onePack,
+      repeat($.onePack)
+    ),
+
+    onePack: $ => choice(
+      $.modelDecl,
+      $.packDecl,
+      $.packEq
+    ),
+
+    include: $ => seq(
+      'include',
+      '"',
+      $.string,
+      '"'
+    ),
+
+    provides: $ => seq('provides', repeat1(seq($.provide, ';'))),
+
+    provide: $ => choice(
+      seq('const', $.ident, ':', $.type, optional(seq('=', $.expression))),
+      seq('unsafe', 'node', $.ident, $.staticParams, $.params, 'returns', $.params),
+      seq('node', $.ident, $.staticParams, $.params, 'returns', $.params),
+      seq('unsafe', 'function', $.ident, $.staticParams, $.params, 'returns', $.params),
+      seq('function', $.ident, $.staticParams, $.params, 'returns', $.params),
+      seq('type', $.oneTypeDecl)
+    ),
+
+    modelDecl: $ => seq(
+      'model',
+      $.ident,
+      optional($.uses),
+      'needs',
+      $.staticParams,
+      ';',
+      optional($.provides),
+      'body',
+      $.packBody,
+      'end'
+    ),
+
+    packDecl: $ => seq(
+      'package',
+      $.ident,
+      optional($.uses),
+      optional($.provides),
+      'body',
+      $.packBody,
+      'end'
+    ),
+
+    uses: $ => seq('uses', $.ident, repeat(seq(',', $.ident)),';'),
+
+    eq_or_is: $ => choice(
+      '=',
+      'is'
+    ),
+
+    packEq: $ => seq(
+      'package',
+      $.ident,
+      $.eq_or_is,
       $.ident,
       '(',
-      $.parameter_list,
+      $.byNameStaticArgList,
       ')',
-      'returns',
-      '(',
-      $.parameter_list,
-      ')',
-      optional($.pragmas),
-      ';',
-      optional(
-        seq(
-          repeat(
-            choice(
-              $.const_definition,
-              $.var_definition
-            )
-          ),
-          $.block
-        )
-      )
-    ),
-
-    type_definition: $ => choice(
-      seq(
-        'type',
-        repeat($.ident),
-        optional($.pragmas),
-        ';'
-      ),
-      seq(
-        'type',
-        $.ident,
-        '=',
-        $._type,
-        optional($.pragmas),
-        ';'
-      )
-    ),
-
-    const_definition: $ => seq(
-      'const',
-      repeat(
-        choice(
-          seq(
-            commaSep($.ident),
-            ':',
-            $._type,
-            optional($.pragmas),
-            ';'
-          ),
-          seq(
-            $.ident,
-            '=',
-            $._expression,
-            optional($.pragmas),
-            ';'
-          ),
-          seq(
-            $.ident,
-            ':',
-            $._type,
-            '=',
-            $._expression,
-            optional($.pragmas),
-            ';'
-          )
-        )
-      ),
-    ),
-
-    var_definition: $ => seq(
-      'var',
-      $.parameter_list,
-      optional(
-        seq(
-          'when',
-          $.identifier
-        )
-      ),
-      optional($.pragmas),
       ';'
     ),
 
-    parameter_list: $ => seq(
-      commaSep($.identifier),
+    packBody: $ => seq(
+      $.oneDecl,
+      repeat($.oneDecl)
+    ),
+
+    oneDecl: $ => choice(
+      $.constDecl,
+      $.typeDecl,
+      $.extNodeDecl,
+      $.nodeDecl
+    ),
+
+    typedIdentsList: $ => seq(
+      $.typedIdents,
+      repeat(seq(';', $.typedIdents))
+    ),
+
+    typedIdents: $ => seq(
+      $.ident,
+      repeat(seq(',', $.ident)),
       ':',
-      $._type,
-      optional('^'+$.number)
+      $.type
     ),
 
-    _type: $ => choice(
-      'bool',
-      'int',
-      'real',
-      'map',
-      'red',
-      'fill',
-      $.record_type,
-      $.array_type,
-      $.enum_type
+    typedValuedIdents: $ => seq(
+      $.typedValuedIdent,
+      repeat(seq(';', $.typedValuedIdent))
     ),
 
-    record_type: $ => seq(
-      'struct',
-      '{',
-      $.parameter_list,
-      '}'
+    typedValuedIdent: $ => seq(
+      $.ident,
+      choice(
+        seq(':', $.type),
+        seq(',', $.ident, repeat(seq(',', $.ident)), ':', $.type),
+        seq(':', $.type, '=', $.expression)
+      )
     ),
 
-    array_type: $=> seq(
-      $._type,
-      '^',
-      $._expression
+    constDecl: $ => seq(
+      'const',
+      $.constDeclList
     ),
 
-    enum_type: $=> seq(
-      'enum',
-      '{',
-      commaSep($.ident),
-      '}'
+    constDeclList: $ => seq(
+      $.oneConstDecl,
+      ';',
+      repeat($.oneConstDecl,';')
     ),
 
-    _function_mode: $ => choice(
-      'extern',
-      'unsafe'
+    oneConstDecl: $ => seq(
+      $.ident,
+      choice(
+        seq(':', $.type),
+        seq(',', $.ident, repeat(seq(',', $.ident)), ':', $.type),
+        seq(':', $.type, '=', $.expression),
+        seq('=', $.expression)
+      )
     ),
 
-    block: $ => seq(
-      'let',
-      repeat($._statement),
-      'tel',
+    typeDecl: $ => seq(
+      'type',
+      $.typeDeclList
+    ),
+
+    typeDeclList: $ => seq(
+      $.oneTypeDecl,
+      ';',
+      repeat($.oneTypeDecl,';')
+    ),
+
+    oneTypeDecl: $ => seq(
+      $.ident,
+      optional(
+        seq(
+          '=',
+          choice(
+            $.type,
+            seq('enum', '{', $.ident, repeat(',',$.ident), '}'),
+            seq(optional('struct'), '{', $.typedValuedIdents, optional(';'), '}')
+          )
+        )
+      )
+    ),
+
+    type: $ => seq(
+      choice('bool', 'int', 'real', $.identRef),
+      repeat(seq('^', $.expression))
+    ),
+
+    extNodeDecl: $ => seq(
+      choice('extern function', 'unsafe extern function', 'extern node', 'unsafe extern node'),
+      $.ident,
+      $.params,
+      'returns',
+      $.params,
       optional(';')
     ),
 
-    _statement: $ => choice(
-      $.equation,
-      $.assertion
+    nodeDecl: $ => $.localNode,
+
+    localNode: $ => choice(
+      seq('node', $.ident, optional($.staticParams), $.params, 'returns', $.params, optional(';'), optional($.localDecls), $.body, choice('.', optional(';'))),
+      seq('function', $.ident, optional($.staticParams), $.params, 'returns', $.params, optional(';'), optional($.localDecls), $.body, choice('.', optional(';'))),
+      seq('node', $.ident, optional($.staticParams), optional($.nodeProfileOpt), '=', $.effectiveNode, optional(';')),
+      seq('function', $.ident, optional($.staticParams), optional($.nodeProfileOpt), '=', $.effectiveNode, optional(';')),
+      seq('unsafe node', $.ident, optional($.staticParams), $.params, 'returns', $.params, optional(';'), optional($.localDecls), $.body, choice('.', optional(';'))),
+      seq('unsafe function', $.ident, optional($.staticParams), $.params, 'returns', $.params, optional(';'), optional($.localDecls), $.body, choice('.', optional(';'))),
+      seq('unsafe node', $.ident, optional($.staticParams), optional($.nodeProfileOpt), '=', $.effectiveNode, optional(';')),
+      seq('unsafe function', $.ident, optional($.staticParams), optional($.nodeProfileOpt), '=', $.effectiveNode, optional(';'))
     ),
 
-    _expression: $ => choice(
-      $.identifier,
-      $.number,
-      seq(
-        '(',
-        commaSep($._expression),
-        ')'
-      ),
-      // Record_Exp, ArrayExp
-      seq(
-        $.unary_op,
-        $._expression
-      ),
-      seq(
-        $._expression,
-        $.binary_op,
-        $._expression
-      ),
-      seq(
-        $.nary_op,
-        $._expression
-      ),
-      seq(
-        'if',
-        $._expression,
-        'then',
-        $._expression,
-        'else',
-        $._expression
-      ),
-  //    $.call,
-      seq(
-        $._expression,
-        $.selector
-      )
+    nodeProfileOpt: $ => seq($.params, 'returns', $.params),
+
+    staticParams: $ => seq(
+        '<<',
+        $.staticParamList,
+        '>>'
     ),
 
-/*
-    call: $ => choice(
-      $.user_op,
-      optional($.pragmas),
+    staticParamList: $ => seq(
+      $.staticParam,
+      repeat(';',$.staticParam)
+    ),
+
+    staticParam: $ => choice(
+      seq('type', $.ident),
+      seq('const', $.ident, ':', $.type),
+      seq('node', $.ident, $.params, 'returns', $.params),
+      seq('function', $.ident, $.params, 'returns', $.params),
+      seq('unsafe node', $.ident, $.params, 'returns', $.params),
+      seq('unsafe function', $.ident, $.params, 'returns', $.params)
+    ),
+
+    params: $ => seq(
       '(',
-      commaSep($._expression),
+      optional(seq($.varDeclList, optional(';'))),
       ')'
-    ) ,
-*/
-    assertion: $ => seq(
-      'assert',
-      $._expression,
-      optional($.pragmas),
+    ),
+
+    localDecls: $ => $.localDeclList,
+
+    localDeclList: $ => seq(
+      $.oneLocalDecl,
+      repeat($.oneLocalDecl)
+    ),
+
+    oneLocalDecl: $ => choice(
+      $.localVars,
+      $.localConsts
+    ),
+
+    localConsts: $ => seq(
+      'const',
+      $.constDeclList
+    ),
+
+    localVars: $ => seq(
+      'var',
+      $.varDeclList,
       ';'
     ),
 
-
-    eqSide: $ => choice(
-      seq(
-        '(',
-        commaSep1($.eqPart),
-        ')'
-      ),
-      seq(
-        commaSep1($.eqPart)
-      )
+    varDeclList: $ => seq(
+      $.varDecl,
+      repeat(seq(';', $.varDecl))
     ),
 
-    eqPart: $ => choice(
-      $.identifier,
-      seq(
-        $.eqPart,
-        $.selector
-      )
+    varDecl: $ => choice(
+      $.typedIdents,
+      seq($.typedIdents, 'when', $.clockExpr),
+      seq('(',$.typedIdentsList,')', 'when', $.clockExpr)
+    ),
+
+    body: $ => seq(
+      'let',
+      optional($.equationList),
+      'tel'
+    ),
+
+    equationList: $ => seq(
+      $.equation,
+      repeat($.equation)
     ),
 
     equation: $ => seq(
-      $.eqSide,
-      '=',
-      $.eqSide,
-      optional($.pragmas),
+      choice('assert', seq($.left, '=')),
+      $.expression,
       ';'
     ),
 
-    selector: $ => choice(
-      seq(
-        '.',
-        $.ident
-      ),
-      seq(
-        '[',
-        $._expression,
-        optional(
-          seq(
-            '..',
-            $._expression
-          )
-        ),
-        ']'
-      )
+    left: $ => choice(
+      $.leftItemList,
+      seq('(', $.leftItemList, ')')
     ),
-    pragmas: $ => /(%(\\.|[^"\\])*%)*/,
-    ident: $ => /[a-zA-Z_][a-zA-Z0-9_]*/,
-    identifier: $ => /([a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z_][a-zA-Z0-9_]*::[a-zA-Z_][a-zA-Z0-9_]*)/,
-    number: $ => /\d+/,
-    operator: $ => choice(
-      $.binary_op,
-      $.unary_op,
-      $.nary_op
+
+    leftItemList: $ => seq(
+      $.leftItem,
+      repeat(seq(',',$.leftItem))
     ),
-    binary_op: $ => choice(
-      '+',
-      '-',
-      '*',
-      '/',
-      'div',
-      'mod',
-      '>',
-      '<',
-      '>=',
-      '<=',
-      '<>',
-      '=',
-      'or',
+
+    leftItem: $ => choice(
+      $.ident,
+      $.fieldLeftItem,
+      $.tableLeftItem
+    ),
+
+    fieldLeftItem: $ => seq(
+      $.leftItem,
+      '.',
+      $.ident
+    ),
+
+    tableLeftItem: $ => seq(
+      $.leftItem,
+      '[',
+      choice($.expression,$.select),
+      ']'
+    ),
+
+    expression: $ => choice(
+      $.constant,
+      $.identRef,
+      seq('not', $.expression),
+      seq('-', $.expression),
+      seq('pre', $.expression),
+      seq('current', $.expression),
+      seq('int', $.expression),
+      seq('real', $.expression),
+      seq($.expression, 'when', $.clockExpr),
+      seq($.expression, 'fby', $.expression),
+      seq($.expression, '->', $.expression),
+      seq($.expression, 'and', $.expression),
+      seq($.expression, 'or', $.expression),
+      seq($.expression, 'xor', $.expression),
+      seq($.expression, '=>', $.expression),
+      seq($.expression, '=', $.expression),
+      seq($.expression, '<>', $.expression),
+      seq($.expression, '<', $.expression),
+      seq($.expression, '>', $.expression),
+      seq($.expression, '>=', $.expression),
+      seq($.expression, 'div', $.expression),
+      seq($.expression, 'mod', $.expression),
+      seq($.expression, '-', $.expression),
+      seq($.expression, '+', $.expression),
+      seq($.expression, '/', $.expression),
+      seq($.expression, '*', $.expression),
+      seq('if', $.expression, 'then', $.expression, 'else', $.expression),
+      seq('with', $.expression, 'then', $.expression, 'else', $.expression),
+      seq('#','(', $.expressionList, ')'),
+      seq('nor','(', $.expressionList, ')'),
+      $.callByPosExpression,
+      seq('[', $.expressionList, ']'),
+      seq($.expression, '^', $.expression),
+      seq($.expression, '|', $.expression),
+      seq($.expression, '[', $.expression, ']'),
+      seq($.expression, '[', $.select, ']'),
+      seq($.expression, '.', $.ident),
+      $.callbyNameExpression,
+      seq('(', $.expressionList, ')'),
+      seq('merge', $.ident, $.mergeCaseList)
+    ),
+
+    mergeCaseList: $ => seq(
+      optional($.mergeCase),
+      repeat1($.mergeCase)
+    ),
+
+    mergeCase: $ => seq(
+        '(',
+        choice($.identRef, 'true', 'false'),
+        '->',
+        $.expression,
+        ')'
+    ),
+
+    clockExpr: $ => choice(
+      seq($.identRef, '(', $.ident,')'),
+      $.ident,
+      seq('not', $.ident),
+      seq('not', '(', $.ident, ')')
+    ),
+
+    predefOp: $ => choice(
+      'not',
+      'fby',
+      'pre',
+      'current',
+      '->',
       'and',
+      'or',
       'xor',
       '=>',
-      'when',
-      '->',
-      'fby'
-    ),
-    unary_op: $ => choice(
+      '=',
+      '<>',
+      '<',
+      '<=',
+      '>',
+      '>=',
+      'div',
+      'mod',
       '-',
-      'not',
-      'pre',
-      'current'
+      '+',
+      '/',
+      '*',
+      'if'
     ),
-    nary_op: $ => choice(
-      '#',
-      'nor'
-    ),
-    user_op: $ => choice(
-      $.identifier,
-      seq(
-        choice(
-          'map',
-          'red',
-          'fill',
-          'fillred',
-          'boolred'
-        ),
-        '<<',
-        $.user_op,
-        ',',
-        $._expression,
-        '>>'
-      )
-    )
 
+    callByPosExpression: $ => seq(
+      $.effectiveNode,
+      '(',
+      $.expressionList,
+      ')'
+    ),
+
+    effectiveNode: $ => seq(
+      $.identRef,
+      optional(seq('<<', $.staticArgList, '>>'))
+    ),
+
+    staticArgList: $ => seq(
+      $.staticArg,
+      repeat(seq(choice(',',';'),$.staticArg))
+    ),
+
+    staticArg: $ => choice(
+      seq('type', $.type),
+      seq('const', $.expression),
+      seq('node', $.effectiveNode),
+      $.predefOp,
+      $.simpleExp,
+      $.surelyType,
+      $.surelyNode
+    ),
+
+    byNameStaticArgList: $ => seq(
+      $.byNameStaticArg,
+      repeat(seq(choice(',',';'),$.byNameStaticArg))
+    ),
+
+    byNameStaticArg: $ => choice(
+      seq('type', $.ident, '=', $.type),
+      seq('const', $.ident, '=', $.expression),
+      seq('node', $.ident, '=', $.effectiveNode),
+      seq('function', $.ident, '=', $.effectiveNode),
+      seq($.ident, '=', $.predefOp),
+      seq($.ident, '=', $.simpleExp),
+      seq($.ident, '=', $.surelyType),
+      seq($.ident, '=', $.surelyNode),
+    ),
+
+    surelyNode: $ => seq(
+      $.identRef,
+      '<<',
+      $.staticArgList,
+      '>>'
+    ),
+
+    surelyType: $ => seq(
+      choice('bool','int', 'real'),
+      repeat(seq('^', $.expression))
+    ),
+
+    simpleExp: $ => choice(
+      $.constant,
+      $.identRef,
+      $.simpleTuple,
+      seq('not', $.simpleExp),
+      seq('-', $.simpleExp),
+      seq($.simpleExp, 'and', $.simpleExp),
+      seq($.simpleExp, 'or', $.simpleExp),
+      seq($.simpleExp, 'xor', $.simpleExp),
+      seq($.simpleExp, '=>', $.simpleExp),
+      seq($.simpleExp, '=', $.simpleExp),
+      seq($.simpleExp, '<>', $.simpleExp),
+      seq($.simpleExp, '<', $.simpleExp),
+      seq($.simpleExp, '<=', $.simpleExp),
+      seq($.simpleExp, '>', $.simpleExp),
+      seq($.simpleExp, '>=', $.simpleExp),
+      seq($.simpleExp, 'div', $.simpleExp),
+      seq($.simpleExp, 'mod', $.simpleExp),
+      seq($.simpleExp, '-', $.simpleExp),
+      seq($.simpleExp, '+', $.simpleExp),
+      seq($.simpleExp, '/', $.simpleExp),
+      seq($.simpleExp, '*', $.simpleExp),
+      seq('if',$.simpleExp, 'then', $.simpleExp, 'else', $.simpleExp)
+    ),
+
+    simpleTuple: $ => seq('(', $.simpleExpList, ')'
+    ),
+
+    simpleExpList: $ => seq(
+      $.simpleExp,
+      repeat(seq(',',$.simpleExp))
+    ),
+
+    callbyNameExpression: $ => seq(
+        $.identRef,
+        '{',
+        optional(seq(optional(seq($.identRef, 'with')), $.callbyNameParamList, optional(';'))),
+        '}'
+    ),
+
+    callbyNameParamList: $ => seq(
+      $.callbyNameParam,
+      repeat(seq(choice(';',','), $.callbyNameParam))
+    ),
+
+    callbyNameParam: $ => seq(
+      $.ident,
+      '=',
+      $.expression
+    ),
+
+    expressionList: $ => seq(
+      $.expression,
+      repeat(seq(',', $.expression))
+    ),
+
+    constant: $ => choice(
+      'true',
+      'false',
+      $.intConst,
+      $.realConst
+    ),
+
+    select: $ => seq(
+      $.expression,
+      '..',
+      $.expression,
+      $.step
+    ),
+
+    step: $ => seq(
+      'step',
+      $.expression
+    ),
+
+    pragma: $ => repeat1(
+      seq('%', $.string, '%')
+    ),
+
+    string: $ => /[^\\"\n]+/,
+    intConst: $ => '(?&lt;![\w\.])(0|[1-9][0-9]*)[uUlL]*(?![\w\.])*',
+    realConst: $ => '(?&lt;![\w\.])((\.[0-9]+ | [0-9]+\.[0-9]*) ([Ee][+-]?[0-9]*)? | ([0-9]+[Ee][+-]?[0-9]*))[fFlL]?(?![\w\.])',
+    ident: $ => /[a-zA-Z_][a-zA-Z0-9_]*/,
+    identRef: $ => /([a-zA-Z_][a-zA-Z0-9_]*|[a-zA-Z_][a-zA-Z0-9_]*::[a-zA-Z_][a-zA-Z0-9_]*)/
   }
 });
-
-function sep1 (rule, separator) {
-  return seq(rule, repeat(seq(separator, rule)));
-}
-
-function commaSep1(rule) {
-  return seq(rule, repeat(seq(',', rule)))
-}
-
-function commaSep(rule) {
-  return optional(commaSep1(rule))
-}

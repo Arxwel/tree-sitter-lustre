@@ -1,0 +1,5 @@
+node add1bit (a, b, cin : bool) returns (r, cout : bool);
+let
+    r = (a xor b) xor cin;
+    cout = (a and b) or (cin and b) or (cin and a);
+tel;
